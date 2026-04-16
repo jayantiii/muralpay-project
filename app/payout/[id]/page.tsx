@@ -43,12 +43,6 @@ export default async function PayoutDetailPage({ params }: { params: Promise<{ i
         </div>
       </section>
 
-      <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <h3 className="mb-3 font-semibold">Mural response (raw)</h3>
-        <pre className="overflow-x-auto rounded-lg bg-zinc-900 p-4 text-xs text-zinc-100">
-          {payout.mural_response ? JSON.stringify(JSON.parse(payout.mural_response), null, 2) : "No response saved."}
-        </pre>
-      </section>
     </div>
   );
 }

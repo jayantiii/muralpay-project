@@ -64,6 +64,7 @@ export default async function PayoutsPage({ searchParams }: Props) {
               <th className="py-2">Recipient</th>
               <th className="py-2">Country</th>
               <th className="py-2">Amount</th>
+              <th className="py-2">Transaction time</th>
               <th className="py-2">Rail</th>
               <th className="py-2">Status</th>
             </tr>
@@ -81,6 +82,7 @@ export default async function PayoutsPage({ searchParams }: Props) {
                 <td className="py-3">
                   {payout.currency} {payout.amount.toFixed(2)}
                 </td>
+                <td className="py-3">{new Date(payout.created_at).toLocaleString()}</td>
                 <td className="py-3 capitalize">{payout.rail}</td>
                 <td className="py-3">
                   <StatusBadge status={payout.status} />
@@ -89,7 +91,7 @@ export default async function PayoutsPage({ searchParams }: Props) {
             ))}
             {payouts.length === 0 ? (
               <tr>
-                <td className="py-6 text-zinc-500" colSpan={6}>
+                <td className="py-6 text-zinc-500" colSpan={7}>
                   No payouts match current filters.
                 </td>
               </tr>

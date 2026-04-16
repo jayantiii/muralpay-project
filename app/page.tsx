@@ -44,6 +44,7 @@ export default async function Home() {
                 <th className="py-2">Recipient</th>
                 <th className="py-2">Country</th>
                 <th className="py-2">Amount</th>
+                <th className="py-2">Transaction time</th>
                 <th className="py-2">Rail</th>
                 <th className="py-2">Status</th>
               </tr>
@@ -60,6 +61,7 @@ export default async function Home() {
                   <td className="py-3">
                     {payout.currency} {payout.amount.toFixed(2)}
                   </td>
+                  <td className="py-3">{new Date(payout.created_at).toLocaleString()}</td>
                   <td className="py-3 capitalize">{payout.rail}</td>
                   <td className="py-3">
                     <StatusBadge status={payout.status} />
@@ -68,7 +70,7 @@ export default async function Home() {
               ))}
               {recent.length === 0 ? (
                 <tr>
-                  <td className="py-6 text-zinc-500" colSpan={5}>
+                  <td className="py-6 text-zinc-500" colSpan={6}>
                     No payouts yet. Create your first payout.
                   </td>
                 </tr>
