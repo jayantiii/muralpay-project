@@ -38,7 +38,7 @@ export default async function PayoutDetailPage({ params }: { params: Promise<{ i
               <p><span className="text-zinc-500">Logged at:</span> {new Date(routingLog.created_at).toLocaleString()}</p>
             </div>
           ) : (
-            <p className="text-sm text-zinc-500">No routing log found.</p>
+            <p className="text-sm text-zinc-500">No routing log found</p>
           )}
         </div>
       </section>
