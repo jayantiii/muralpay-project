@@ -1,6 +1,12 @@
 export type Urgency = "fast" | "normal";
 export type Rail = "bank" | "stablecoin";
 export type PayoutStatus = "pending" | "processing" | "completed" | "failed";
+export type PayoutEventType =
+  | "payout_requested"
+  | "routing_decided"
+  | "execution_started"
+  | "execution_succeeded"
+  | "execution_failed";
 
 export interface CreatePayoutInput {
   recipient_name: string;
@@ -51,5 +57,13 @@ export interface RoutingLogRecord {
   input_data: string;
   decision: Rail;
   reason: string;
+  created_at: string;
+}
+
+export interface PayoutEventRecord {
+  id: string;
+  payout_id: string;
+  event_type: PayoutEventType;
+  payload: string | null;
   created_at: string;
 }

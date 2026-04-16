@@ -43,6 +43,15 @@ export async function getDbPool(): Promise<Pool> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
+    await currentPool.query(`
+      CREATE TABLE IF NOT EXISTS payout_events (
+        id TEXT PRIMARY KEY,
+        payout_id TEXT NOT NULL REFERENCES payouts(id) ON DELETE CASCADE,
+        event_type TEXT NOT NULL,
+        payload JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
     initialized = true;
   }
   return currentPool;

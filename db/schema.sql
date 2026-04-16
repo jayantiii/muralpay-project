@@ -21,3 +21,11 @@ CREATE TABLE IF NOT EXISTS routing_logs (
   reason TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS payout_events (
+  id TEXT PRIMARY KEY,
+  payout_id TEXT NOT NULL REFERENCES payouts(id) ON DELETE CASCADE,
+  event_type TEXT NOT NULL,
+  payload JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

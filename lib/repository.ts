@@ -1,7 +1,7 @@
 import { getDbPool } from "@/lib/db";
 import { decideRail } from "@/lib/routing";
 import { executeMuralPayout } from "@/lib/mural";
-import type { CreatePayoutInput, PayoutRecord, PayoutStatus, Rail, RoutingLogRecord } from "@/lib/types";
+import type { CreatePayoutInput, PayoutEventRecord, PayoutEventType, PayoutRecord, PayoutStatus, Rail, RoutingLogRecord } from "@/lib/types";
 
 interface PayoutFilters {
   country?: string;
@@ -12,17 +12,19 @@ interface PayoutFilters {
 interface CreatePayoutResult {
   payout: PayoutRecord;
   routingLog: RoutingLogRecord;
+  events: PayoutEventRecord[];
 }
 
 type MemoryStore = {
   payouts: PayoutRecord[];
   routingLogs: RoutingLogRecord[];
+  payoutEvents: PayoutEventRecord[];
 };
 
 function getMemoryStore(): MemoryStore {
   const g = globalThis as typeof globalThis & { __memoryStore?: MemoryStore };
   if (!g.__memoryStore) {
-    g.__memoryStore = { payouts: [], routingLogs: [] };
+    g.__memoryStore = { payouts: [], routingLogs: [], payoutEvents: [] };
   }
   return g.__memoryStore;
 }
@@ -55,15 +57,69 @@ function rowToRoutingLogRecord(row: Record<string, unknown>): RoutingLogRecord {
   };
 }
 
+function rowToPayoutEventRecord(row: Record<string, unknown>): PayoutEventRecord {
+  return {
+    id: String(row.id),
+    payout_id: String(row.payout_id),
+    event_type: row.event_type as PayoutEventType,
+    payload: row.payload ? JSON.stringify(row.payload) : null,
+    created_at: new Date(String(row.created_at)).toISOString(),
+  };
+}
+
+function makePayoutEvent(payoutId: string, eventType: PayoutEventType, payload?: unknown): PayoutEventRecord {
+  return {
+    id: `evt_${crypto.randomUUID()}`,
+    payout_id: payoutId,
+    event_type: eventType,
+    payload: payload ? JSON.stringify(payload) : null,
+    created_at: new Date().toISOString(),
+  };
+}
+
+async function insertPayoutEvent(
+  payoutId: string,
+  eventType: PayoutEventType,
+  payload: unknown,
+  hasDb: boolean,
+): Promise<PayoutEventRecord> {
+  const event = makePayoutEvent(payoutId, eventType, payload);
+  if (!hasDb) {
+    getMemoryStore().payoutEvents.unshift(event);
+    return event;
+  }
+
+  const pool = await getDbPool();
+  const inserted = await pool.query(
+    `INSERT INTO payout_events (id, payout_id, event_type, payload)
+     VALUES ($1,$2,$3,$4::jsonb)
+     RETURNING *`,
+    [event.id, payoutId, eventType, JSON.stringify(payload ?? {})],
+  );
+  return rowToPayoutEventRecord(inserted.rows[0]);
+}
+
 export async function createPayout(input: CreatePayoutInput): Promise<CreatePayoutResult> {
   const payoutId = `payout_${crypto.randomUUID()}`;
   const logId = `route_${crypto.randomUUID()}`;
   const routing = decideRail(input);
   const hasDb = Boolean(process.env.DATABASE_URL);
+  const events: PayoutEventRecord[] = [];
 
   if (!hasDb) {
     const store = getMemoryStore();
+    events.push(await insertPayoutEvent(payoutId, "payout_requested", { input }, hasDb));
+    events.push(await insertPayoutEvent(payoutId, "routing_decided", { rail: routing.selected_rail, reason: routing.reason }, hasDb));
+    events.push(await insertPayoutEvent(payoutId, "execution_started", { rail: routing.selected_rail }, hasDb));
     const mural = await executeMuralPayout(input, routing.selected_rail);
+    events.push(
+      await insertPayoutEvent(
+        payoutId,
+        mural.status === "completed" ? "execution_succeeded" : "execution_failed",
+        { transactionId: mural.transactionId, raw: mural.raw },
+        hasDb,
+      ),
+    );
     const payout: PayoutRecord = {
       id: payoutId,
       recipient_name: input.recipient_name,
@@ -88,7 +144,7 @@ export async function createPayout(input: CreatePayoutInput): Promise<CreatePayo
     };
     store.payouts.unshift(payout);
     store.routingLogs.unshift(routingLog);
-    return { payout, routingLog };
+    return { payout, routingLog, events };
   }
 
   const pool = await getDbPool();
@@ -117,7 +173,18 @@ export async function createPayout(input: CreatePayoutInput): Promise<CreatePayo
     [logId, payoutId, JSON.stringify(input), routing.selected_rail, routing.reason],
   );
 
+  events.push(await insertPayoutEvent(payoutId, "payout_requested", { input }, hasDb));
+  events.push(await insertPayoutEvent(payoutId, "routing_decided", { rail: routing.selected_rail, reason: routing.reason }, hasDb));
+  events.push(await insertPayoutEvent(payoutId, "execution_started", { rail: routing.selected_rail }, hasDb));
   const mural = await executeMuralPayout(input, routing.selected_rail);
+  events.push(
+    await insertPayoutEvent(
+      payoutId,
+      mural.status === "completed" ? "execution_succeeded" : "execution_failed",
+      { transactionId: mural.transactionId, raw: mural.raw },
+      hasDb,
+    ),
+  );
   const finalStatus: PayoutStatus = mural.status === "completed" ? "completed" : "failed";
 
   const updated = await pool.query(
@@ -133,6 +200,7 @@ export async function createPayout(input: CreatePayoutInput): Promise<CreatePayo
   return {
     payout: rowToPayoutRecord(updated.rows[0]),
     routingLog: rowToRoutingLogRecord(log.rows[0]),
+    events,
   };
 }
 
@@ -173,13 +241,16 @@ export async function getPayouts(filters: PayoutFilters = {}): Promise<PayoutRec
   return result.rows.map((row) => rowToPayoutRecord(row));
 }
 
-export async function getPayoutById(id: string): Promise<{ payout: PayoutRecord; routingLog: RoutingLogRecord | null } | null> {
+export async function getPayoutById(
+  id: string,
+): Promise<{ payout: PayoutRecord; routingLog: RoutingLogRecord | null; events: PayoutEventRecord[] } | null> {
   if (!process.env.DATABASE_URL) {
     const store = getMemoryStore();
     const payout = store.payouts.find((item) => item.id === id);
     if (!payout) return null;
     const routingLog = store.routingLogs.find((item) => item.payout_id === id) ?? null;
-    return { payout, routingLog };
+    const events = store.payoutEvents.filter((item) => item.payout_id === id);
+    return { payout, routingLog, events };
   }
 
   const pool = await getDbPool();
@@ -188,8 +259,10 @@ export async function getPayoutById(id: string): Promise<{ payout: PayoutRecord;
     return null;
   }
   const logRes = await pool.query(`SELECT * FROM routing_logs WHERE payout_id = $1 ORDER BY created_at DESC LIMIT 1`, [id]);
+  const eventsRes = await pool.query(`SELECT * FROM payout_events WHERE payout_id = $1 ORDER BY created_at ASC`, [id]);
   return {
     payout: rowToPayoutRecord(payoutRes.rows[0]),
     routingLog: logRes.rowCount ? rowToRoutingLogRecord(logRes.rows[0]) : null,
+    events: eventsRes.rows.map((row) => rowToPayoutEventRecord(row)),
   };
 }

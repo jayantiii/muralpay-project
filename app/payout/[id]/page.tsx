@@ -7,7 +7,7 @@ export default async function PayoutDetailPage({ params }: { params: Promise<{ i
   const result = await getPayoutById(id);
   if (!result) notFound();
 
-  const { payout, routingLog } = result;
+  const { payout, routingLog, events } = result;
 
   return (
     <div className="space-y-6">
@@ -48,6 +48,27 @@ export default async function PayoutDetailPage({ params }: { params: Promise<{ i
         <pre className="overflow-x-auto rounded-lg bg-zinc-900 p-4 text-xs text-zinc-100">
           {payout.mural_response ? JSON.stringify(JSON.parse(payout.mural_response), null, 2) : "No response saved."}
         </pre>
+      </section>
+
+      <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+        <h3 className="mb-3 font-semibold">Event timeline</h3>
+        {events.length === 0 ? (
+          <p className="text-sm text-zinc-500">No events captured.</p>
+        ) : (
+          <ol className="space-y-3">
+            {events.map((event) => (
+              <li key={event.id} className="rounded-lg border border-zinc-200 p-3 text-sm">
+                <p className="font-medium capitalize">{event.event_type.replaceAll("_", " ")}</p>
+                <p className="text-xs text-zinc-500">{new Date(event.created_at).toLocaleString()}</p>
+                {event.payload ? (
+                  <pre className="mt-2 overflow-x-auto rounded bg-zinc-900 p-2 text-xs text-zinc-100">
+                    {JSON.stringify(JSON.parse(event.payload), null, 2)}
+                  </pre>
+                ) : null}
+              </li>
+            ))}
+          </ol>
+        )}
       </section>
     </div>
   );

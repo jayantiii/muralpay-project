@@ -10,14 +10,18 @@ export function NewPayoutForm() {
   const formRef = useRef<HTMLFormElement>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [prefillApplied, setPrefillApplied] = useState(false);
 
   function prefillTestData() {
     const form = formRef.current;
     if (!form) return;
 
     const set = (name: string, value: string) => {
-      const field = form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement | null;
-      if (field) field.value = value;
+      const field = form.querySelector(`[name="${name}"]`) as HTMLInputElement | HTMLSelectElement | null;
+      if (!field) return;
+      field.value = value;
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+      field.dispatchEvent(new Event("change", { bubbles: true }));
     };
 
     set("recipient_name", "Vendor1");
@@ -40,11 +44,14 @@ export function NewPayoutForm() {
     set("wallet_address", "0x0c5872cfbC7f9C2Be62AC9706C84e34DD29ca1CD");
     set("wallet_network", "POLYGON");
     set("urgency", "normal");
+    setError(null);
+    setPrefillApplied(true);
   }
 
   async function onSubmit(formData: FormData) {
     setLoading(true);
     setError(null);
+    setPrefillApplied(false);
 
     const payload = {
       recipient_name: String(formData.get("recipient_name") ?? ""),
@@ -136,6 +143,7 @@ export function NewPayoutForm() {
         <option value="fast">Fast</option>
       </select>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {prefillApplied ? <p className="text-sm text-emerald-700">Test data filled. You can submit now.</p> : null}
       <button
         type="submit"
         disabled={loading}
