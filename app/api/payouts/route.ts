@@ -61,6 +61,7 @@ function parseCreateInput(body: unknown): CreatePayoutInput {
     currency: String(data.currency),
     purpose: data.purpose ? String(data.purpose) : undefined,
     urgency: data.urgency === "fast" ? "fast" : "normal",
+    preferred_rail: data.preferred_rail === "bank" || data.preferred_rail === "stablecoin" ? data.preferred_rail : undefined,
     bank_beneficiary_name: data.bank_beneficiary_name ? String(data.bank_beneficiary_name).trim() : undefined,
     bank_beneficiary_address: data.bank_beneficiary_address ? String(data.bank_beneficiary_address).trim() : undefined,
     bank_routing_number: data.bank_routing_number ? String(data.bank_routing_number).trim() : undefined,

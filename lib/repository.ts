@@ -1,7 +1,18 @@
 import { getDbPool } from "@/lib/db";
 import { decideRail } from "@/lib/routing";
 import { executeMuralPayout } from "@/lib/mural";
-import type { CreatePayoutInput, PayoutEventRecord, PayoutEventType, PayoutRecord, PayoutStatus, Rail, RoutingLogRecord } from "@/lib/types";
+import type {
+  BulkPayoutInput,
+  CreatePayoutInput,
+  PayoutBatchItemRecord,
+  PayoutBatchRecord,
+  PayoutEventRecord,
+  PayoutEventType,
+  PayoutRecord,
+  PayoutStatus,
+  Rail,
+  RoutingLogRecord,
+} from "@/lib/types";
 
 interface PayoutFilters {
   country?: string;
@@ -19,12 +30,14 @@ type MemoryStore = {
   payouts: PayoutRecord[];
   routingLogs: RoutingLogRecord[];
   payoutEvents: PayoutEventRecord[];
+  payoutBatches: PayoutBatchRecord[];
+  payoutBatchItems: PayoutBatchItemRecord[];
 };
 
 function getMemoryStore(): MemoryStore {
   const g = globalThis as typeof globalThis & { __memoryStore?: MemoryStore };
   if (!g.__memoryStore) {
-    g.__memoryStore = { payouts: [], routingLogs: [], payoutEvents: [] };
+    g.__memoryStore = { payouts: [], routingLogs: [], payoutEvents: [], payoutBatches: [], payoutBatchItems: [] };
   }
   return g.__memoryStore;
 }
@@ -63,6 +76,31 @@ function rowToPayoutEventRecord(row: Record<string, unknown>): PayoutEventRecord
     payout_id: String(row.payout_id),
     event_type: row.event_type as PayoutEventType,
     payload: row.payload ? JSON.stringify(row.payload) : null,
+    created_at: new Date(String(row.created_at)).toISOString(),
+  };
+}
+
+function rowToPayoutBatchRecord(row: Record<string, unknown>): PayoutBatchRecord {
+  return {
+    id: String(row.id),
+    status: row.status as "processing" | "completed" | "failed",
+    total_count: Number(row.total_count),
+    success_count: Number(row.success_count),
+    failed_count: Number(row.failed_count),
+    source_type: row.source_type as "csv" | "json",
+    created_at: new Date(String(row.created_at)).toISOString(),
+  };
+}
+
+function rowToPayoutBatchItemRecord(row: Record<string, unknown>): PayoutBatchItemRecord {
+  return {
+    id: String(row.id),
+    batch_id: String(row.batch_id),
+    row_index: Number(row.row_index),
+    status: row.status as "completed" | "failed",
+    payout_id: row.payout_id ? String(row.payout_id) : null,
+    error_message: row.error_message ? String(row.error_message) : null,
+    input_data: JSON.stringify(row.input_data),
     created_at: new Date(String(row.created_at)).toISOString(),
   };
 }
@@ -264,5 +302,132 @@ export async function getPayoutById(
     payout: rowToPayoutRecord(payoutRes.rows[0]),
     routingLog: logRes.rowCount ? rowToRoutingLogRecord(logRes.rows[0]) : null,
     events: eventsRes.rows.map((row) => rowToPayoutEventRecord(row)),
+  };
+}
+
+export async function createPayoutBatch(rows: BulkPayoutInput[], sourceType: "csv" | "json"): Promise<PayoutBatchRecord> {
+  const batchId = `batch_${crypto.randomUUID()}`;
+  const hasDb = Boolean(process.env.DATABASE_URL);
+
+  if (!hasDb) {
+    const store = getMemoryStore();
+    let successCount = 0;
+    let failedCount = 0;
+    for (let i = 0; i < rows.length; i += 1) {
+      const row = rows[i];
+      try {
+        const result = await createPayout(row);
+        store.payoutBatchItems.unshift({
+          id: `bitem_${crypto.randomUUID()}`,
+          batch_id: batchId,
+          row_index: i + 1,
+          status: "completed",
+          payout_id: result.payout.id,
+          error_message: null,
+          input_data: JSON.stringify(row),
+          created_at: new Date().toISOString(),
+        });
+        successCount += 1;
+      } catch (error) {
+        failedCount += 1;
+        store.payoutBatchItems.unshift({
+          id: `bitem_${crypto.randomUUID()}`,
+          batch_id: batchId,
+          row_index: i + 1,
+          status: "failed",
+          payout_id: null,
+          error_message: error instanceof Error ? error.message : "Unknown batch row error.",
+          input_data: JSON.stringify(row),
+          created_at: new Date().toISOString(),
+        });
+      }
+    }
+    const batch: PayoutBatchRecord = {
+      id: batchId,
+      status: failedCount === rows.length ? "failed" : "completed",
+      total_count: rows.length,
+      success_count: successCount,
+      failed_count: failedCount,
+      source_type: sourceType,
+      created_at: new Date().toISOString(),
+    };
+    store.payoutBatches.unshift(batch);
+    return batch;
+  }
+
+  const pool = await getDbPool();
+  await pool.query(
+    `INSERT INTO payout_batches (id, status, total_count, success_count, failed_count, source_type)
+     VALUES ($1,$2,$3,$4,$5,$6)`,
+    [batchId, "processing", rows.length, 0, 0, sourceType],
+  );
+
+  let successCount = 0;
+  let failedCount = 0;
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    try {
+      const result = await createPayout(row);
+      await pool.query(
+        `INSERT INTO payout_batch_items (id, batch_id, row_index, status, payout_id, error_message, input_data)
+         VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb)`,
+        [`bitem_${crypto.randomUUID()}`, batchId, i + 1, "completed", result.payout.id, null, JSON.stringify(row)],
+      );
+      successCount += 1;
+    } catch (error) {
+      failedCount += 1;
+      await pool.query(
+        `INSERT INTO payout_batch_items (id, batch_id, row_index, status, payout_id, error_message, input_data)
+         VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb)`,
+        [
+          `bitem_${crypto.randomUUID()}`,
+          batchId,
+          i + 1,
+          "failed",
+          null,
+          error instanceof Error ? error.message : "Unknown batch row error.",
+          JSON.stringify(row),
+        ],
+      );
+    }
+  }
+
+  const finalStatus = failedCount === rows.length ? "failed" : "completed";
+  const updated = await pool.query(
+    `UPDATE payout_batches
+     SET status = $2, success_count = $3, failed_count = $4
+     WHERE id = $1
+     RETURNING *`,
+    [batchId, finalStatus, successCount, failedCount],
+  );
+  return rowToPayoutBatchRecord(updated.rows[0]);
+}
+
+export async function getPayoutBatches(): Promise<PayoutBatchRecord[]> {
+  if (!process.env.DATABASE_URL) {
+    return getMemoryStore().payoutBatches;
+  }
+  const pool = await getDbPool();
+  const result = await pool.query(`SELECT * FROM payout_batches ORDER BY created_at DESC`);
+  return result.rows.map((row) => rowToPayoutBatchRecord(row));
+}
+
+export async function getPayoutBatchById(
+  id: string,
+): Promise<{ batch: PayoutBatchRecord; items: PayoutBatchItemRecord[] } | null> {
+  if (!process.env.DATABASE_URL) {
+    const store = getMemoryStore();
+    const batch = store.payoutBatches.find((item) => item.id === id);
+    if (!batch) return null;
+    const items = store.payoutBatchItems.filter((item) => item.batch_id === id);
+    return { batch, items };
+  }
+  const pool = await getDbPool();
+  const batchRes = await pool.query(`SELECT * FROM payout_batches WHERE id = $1`, [id]);
+  if (!batchRes.rowCount) return null;
+  const itemsRes = await pool.query(`SELECT * FROM payout_batch_items WHERE batch_id = $1 ORDER BY row_index ASC`, [id]);
+  return {
+    batch: rowToPayoutBatchRecord(batchRes.rows[0]),
+    items: itemsRes.rows.map((row) => rowToPayoutBatchItemRecord(row)),
   };
 }

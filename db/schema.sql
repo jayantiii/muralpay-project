@@ -29,3 +29,24 @@ CREATE TABLE IF NOT EXISTS payout_events (
   payload JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS payout_batches (
+  id TEXT PRIMARY KEY,
+  status TEXT NOT NULL,
+  total_count INTEGER NOT NULL,
+  success_count INTEGER NOT NULL,
+  failed_count INTEGER NOT NULL,
+  source_type TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS payout_batch_items (
+  id TEXT PRIMARY KEY,
+  batch_id TEXT NOT NULL REFERENCES payout_batches(id) ON DELETE CASCADE,
+  row_index INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  payout_id TEXT,
+  error_message TEXT,
+  input_data JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

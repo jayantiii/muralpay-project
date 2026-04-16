@@ -7,6 +7,8 @@ export type PayoutEventType =
   | "execution_started"
   | "execution_succeeded"
   | "execution_failed";
+export type BatchStatus = "processing" | "completed" | "failed";
+export type BatchItemStatus = "completed" | "failed";
 
 export interface CreatePayoutInput {
   recipient_name: string;
@@ -27,6 +29,7 @@ export interface CreatePayoutInput {
   currency: string;
   purpose?: string;
   urgency: Urgency;
+  preferred_rail?: Rail;
   wallet_address?: string;
   wallet_network?: string;
 }
@@ -65,5 +68,49 @@ export interface PayoutEventRecord {
   payout_id: string;
   event_type: PayoutEventType;
   payload: string | null;
+  created_at: string;
+}
+
+export interface BulkPayoutInput {
+  recipient_name: string;
+  recipient_email: string;
+  recipient_address_line1: string;
+  recipient_city: string;
+  recipient_state: string;
+  recipient_postal_code: string;
+  country: string;
+  amount: number;
+  currency: string;
+  purpose?: string;
+  urgency: Urgency;
+  bank_beneficiary_name?: string;
+  bank_beneficiary_address?: string;
+  bank_routing_number?: string;
+  bank_account_number?: string;
+  bank_name?: string;
+  bank_address?: string;
+  bank_account_type?: "CHECKING" | "SAVINGS";
+  wallet_address?: string;
+  wallet_network?: string;
+}
+
+export interface PayoutBatchRecord {
+  id: string;
+  status: BatchStatus;
+  total_count: number;
+  success_count: number;
+  failed_count: number;
+  source_type: "csv" | "json";
+  created_at: string;
+}
+
+export interface PayoutBatchItemRecord {
+  id: string;
+  batch_id: string;
+  row_index: number;
+  status: BatchItemStatus;
+  payout_id: string | null;
+  error_message: string | null;
+  input_data: string;
   created_at: string;
 }

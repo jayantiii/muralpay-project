@@ -4,6 +4,8 @@ const links = [
   { href: "/", label: "Dashboard" },
   { href: "/payouts", label: "Payouts" },
   { href: "/new", label: "New Payout" },
+  { href: "/batches", label: "Bulk Batches" },
+  { href: "/about", label: "About" },
 ];
 
 export function TopNav() {

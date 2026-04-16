@@ -2,6 +2,8 @@ import Link from "next/link";
 import { getPayouts } from "@/lib/repository";
 import { StatusBadge } from "@/components/status-badge";
 
+export const dynamic = "force-dynamic";
+
 interface Props {
   searchParams: Promise<{
     country?: string;

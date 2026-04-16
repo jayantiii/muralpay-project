@@ -23,6 +23,13 @@ const LATAM_COUNTRIES = new Set([
 const BANK_DEFAULT_COUNTRIES = new Set(["US", "CA", "GB", "DE", "FR", "ES", "IT", "NL", "IE", "PT"]);
 
 export function decideRail(input: CreatePayoutInput): RoutingDecision {
+  if (input.preferred_rail) {
+    return {
+      selected_rail: input.preferred_rail,
+      reason: `User-selected rail override: ${input.preferred_rail}.`,
+    };
+  }
+
   const country = input.country.trim().toUpperCase();
 
   if (input.amount > 1000) {

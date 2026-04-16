@@ -11,6 +11,7 @@ export function NewPayoutForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [prefillApplied, setPrefillApplied] = useState(false);
+  const [preferredRail, setPreferredRail] = useState<"" | "bank" | "stablecoin">("");
 
   function prefillTestData() {
     const form = formRef.current;
@@ -34,6 +35,7 @@ export function NewPayoutForm() {
     set("amount", "100");
     set("currency", "USD");
     set("purpose", "Sandbox payout test");
+    set("preferred_rail", "bank");
     set("bank_beneficiary_name", "Vendor1");
     set("bank_beneficiary_address", "123 Mock St, Houston, Texas 77002");
     set("bank_routing_number", "386642098");
@@ -65,6 +67,7 @@ export function NewPayoutForm() {
       currency: String(formData.get("currency") ?? "USDC"),
       purpose: String(formData.get("purpose") ?? ""),
       urgency: String(formData.get("urgency") ?? "normal"),
+      preferred_rail: String(formData.get("preferred_rail") ?? ""),
       bank_beneficiary_name: String(formData.get("bank_beneficiary_name") ?? ""),
       bank_beneficiary_address: String(formData.get("bank_beneficiary_address") ?? ""),
       bank_routing_number: String(formData.get("bank_routing_number") ?? ""),
@@ -99,13 +102,32 @@ export function NewPayoutForm() {
     >
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Create New Payout</h2>
-        <button
-          type="button"
-          onClick={prefillTestData}
-          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-        >
-          Prefill test data
-        </button>
+        <div className="flex items-center gap-2">
+          <select
+            name="preferred_rail"
+            value={preferredRail}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value === "bank" || value === "stablecoin") {
+                setPreferredRail(value);
+                return;
+              }
+              setPreferredRail("");
+            }}
+            className="rounded-lg border border-zinc-300 p-2 text-sm"
+          >
+            <option value="">Auto (routing engine)</option>
+            <option value="bank">Bank</option>
+            <option value="stablecoin">Stablecoin</option>
+          </select>
+          <button
+            type="button"
+            onClick={prefillTestData}
+            className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+          >
+            Prefill test data
+          </button>
+        </div>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <input name="recipient_name" placeholder="Recipient name" className="rounded-lg border border-zinc-300 p-2" required />
@@ -118,25 +140,33 @@ export function NewPayoutForm() {
         <input name="amount" type="number" step="0.01" placeholder="Amount" className="rounded-lg border border-zinc-300 p-2" required />
         <input name="currency" defaultValue="USD" className="rounded-lg border border-zinc-300 p-2" required />
         <input name="purpose" placeholder="Purpose" className="rounded-lg border border-zinc-300 p-2 md:col-span-2" />
-        <input name="bank_beneficiary_name" placeholder="Bank beneficiary name (required for bank payouts)" className="rounded-lg border border-zinc-300 p-2 md:col-span-2" />
-        <input name="bank_beneficiary_address" placeholder="Bank beneficiary address" className="rounded-lg border border-zinc-300 p-2 md:col-span-2" />
-        <input name="bank_routing_number" placeholder="Bank routing number" className="rounded-lg border border-zinc-300 p-2" />
-        <input name="bank_account_number" placeholder="Bank account number" className="rounded-lg border border-zinc-300 p-2" />
-        <input name="bank_name" placeholder="Bank name" className="rounded-lg border border-zinc-300 p-2" />
-        <input name="bank_address" placeholder="Bank address" className="rounded-lg border border-zinc-300 p-2" />
-        <select name="bank_account_type" defaultValue="CHECKING" className="rounded-lg border border-zinc-300 p-2">
-          <option value="CHECKING">Checking</option>
-          <option value="SAVINGS">Savings</option>
-        </select>
-        <input
-          name="wallet_address"
-          placeholder="Recipient wallet address (required for stablecoin payouts)"
-          className="rounded-lg border border-zinc-300 p-2 md:col-span-2"
-          defaultValue="0x0c5872cfbC7f9C2Be62AC9706C84e34DD29ca1CD"
-          pattern={EVM_ADDRESS_PATTERN}
-          title="Enter a valid wallet address: 0x followed by 40 hex characters."
-        />
-        <input name="wallet_network" defaultValue="POLYGON" placeholder="Wallet network (e.g. POLYGON)" className="rounded-lg border border-zinc-300 p-2 md:col-span-2" required />
+        {preferredRail !== "stablecoin" ? (
+          <>
+            <input name="bank_beneficiary_name" placeholder="Bank beneficiary name (required for bank payouts)" className="rounded-lg border border-zinc-300 p-2 md:col-span-2" />
+            <input name="bank_beneficiary_address" placeholder="Bank beneficiary address" className="rounded-lg border border-zinc-300 p-2 md:col-span-2" />
+            <input name="bank_routing_number" placeholder="Bank routing number" className="rounded-lg border border-zinc-300 p-2" />
+            <input name="bank_account_number" placeholder="Bank account number" className="rounded-lg border border-zinc-300 p-2" />
+            <input name="bank_name" placeholder="Bank name" className="rounded-lg border border-zinc-300 p-2" />
+            <input name="bank_address" placeholder="Bank address" className="rounded-lg border border-zinc-300 p-2" />
+            <select name="bank_account_type" defaultValue="CHECKING" className="rounded-lg border border-zinc-300 p-2">
+              <option value="CHECKING">Checking</option>
+              <option value="SAVINGS">Savings</option>
+            </select>
+          </>
+        ) : null}
+        {preferredRail !== "bank" ? (
+          <>
+            <input
+              name="wallet_address"
+              placeholder="Recipient wallet address (required for stablecoin payouts)"
+              className="rounded-lg border border-zinc-300 p-2 md:col-span-2"
+              defaultValue="0x0c5872cfbC7f9C2Be62AC9706C84e34DD29ca1CD"
+              pattern={EVM_ADDRESS_PATTERN}
+              title="Enter a valid wallet address: 0x followed by 40 hex characters."
+            />
+            <input name="wallet_network" defaultValue="POLYGON" placeholder="Wallet network (e.g. POLYGON)" className="rounded-lg border border-zinc-300 p-2 md:col-span-2" required />
+          </>
+        ) : null}
       </div>
       <select name="urgency" className="w-full rounded-lg border border-zinc-300 p-2">
         <option value="normal">Normal</option>
